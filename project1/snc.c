@@ -31,6 +31,11 @@ void opt_err(){
     fprintf(stderr,"usage: snc [­-l] [­-u] [hostname] port\n");   
     exit(1);
 }
+void int_err(){
+	fprintf(stderr,"internal error\n");
+	exit(1);
+}
+
 
 int main(int argc, char *argv[])
 {
@@ -49,7 +54,8 @@ int main(int argc, char *argv[])
           uflag = 1;
           break;
         case '?':
-          default:
+        default:
+          opt_err();
           break;
       }     
     if (optind == argc) opt_err();    
@@ -94,13 +100,12 @@ void serve(struct hostent *server, int uflag, int portno){
     struct sockaddr_in serv_addr, cli_addr; 
     char buffer[256];
     if (server == NULL) {
-        fprintf(stderr,"ERROR, no such host\n");
-        exit(0);
+        int_err();
     } 
     if (uflag == 1) sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     else sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) 
-        error("ERROR opening socket");
+         int_err();
     bzero((char *) &serv_addr, sizeof(serv_addr));
 
     serv_addr.sin_family = AF_INET;
@@ -111,13 +116,13 @@ void serve(struct hostent *server, int uflag, int portno){
 
     if (bind(sockfd, (struct sockaddr *) &serv_addr,
             sizeof(serv_addr)) < 0) 
-            error("ERROR on binding");
+             int_err();
     listen(sockfd,5);
     clilen = sizeof(cli_addr);
     if (uflag != 1) {
         newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);        
         if (newsockfd < 0) 
-          error("ERROR on accept");
+          int_err();
     }
     if (uflag == 1){
         while(1){
@@ -127,7 +132,7 @@ void serve(struct hostent *server, int uflag, int portno){
                 n = read(sockfd,buffer,255);
                 if (n == 0) break;
                 if (n < 0) 
-                    error("ERROR reading from socket");
+                     int_err();
                 printf("%s",buffer);
             }
         }
@@ -139,7 +144,7 @@ void serve(struct hostent *server, int uflag, int portno){
         	n = read(newsockfd,buffer,255);
         	if (n == 0) break;
             if (n < 0) 
-            	error("ERROR reading from socket");
+            	 int_err();
         	printf("%s",buffer);
         }
     }
@@ -154,10 +159,9 @@ void client(struct hostent *server, int uflag, int portno){
     if (uflag == 1) sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     else sockfd = socket(AF_INET, SOCK_STREAM, 0);    
     if (sockfd < 0) 
-        error("ERROR opening socket");
+         int_err();
     if (server == NULL) {
-        fprintf(stderr,"ERROR, no such host\n");
-        exit(0);
+         int_err();
     }
     bzero((char *) &serv_addr, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
@@ -177,7 +181,7 @@ void client(struct hostent *server, int uflag, int portno){
             }           
             n = write(sockfd,buffer2,strlen(buffer2));
             if (n < 0) 
-                 error("ERROR writing to socket");
+                  int_err();
          }
     }
     else {
@@ -187,7 +191,7 @@ void client(struct hostent *server, int uflag, int portno){
             n = write(sockfd,buffer,strlen(buffer));
             if (n == 0) break;
             if (n < 0) 
-                 error("ERROR writing to socket");
+                 int_err();
          }
     }
     return;
