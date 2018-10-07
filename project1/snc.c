@@ -69,10 +69,7 @@ int main(int argc, char *argv[])
     	server->h_length = 0;     	
     }           
     
-    if (hflag == 0 && lflag == 0) {
-        printf("3\n");        
-        opt_err();        	 
-    }
+    if (hflag == 0 && lflag == 0) opt_err();        	 
     if (lflag == 1){
     	serve(server,uflag,portno);    	
     }
@@ -96,7 +93,6 @@ void serve(struct hostent *server, int uflag, int portno){
 
     struct sockaddr_in serv_addr, cli_addr; 
     char buffer[256];
-    printf("%d\n",uflag);
     if (server == NULL) {
         fprintf(stderr,"ERROR, no such host\n");
         exit(0);
@@ -123,7 +119,6 @@ void serve(struct hostent *server, int uflag, int portno){
         if (newsockfd < 0) 
           error("ERROR on accept");
     }
-    printf("%d\n",INADDR_ANY);
     if (uflag == 1){
         while(1){
             bzero(buffer,256);    
@@ -172,7 +167,6 @@ void client(struct hostent *server, int uflag, int portno){
     serv_addr.sin_port = htons(portno);
     if (connect(sockfd,(struct sockaddr *)&serv_addr,sizeof(serv_addr)) < 0) 
         error("ERROR connecting");
-    printf("Please enter the message: \n");
     if (uflag == 1){
         while (1){
             bzero(buffer,256);
