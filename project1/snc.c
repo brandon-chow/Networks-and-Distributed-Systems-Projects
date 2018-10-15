@@ -15,7 +15,15 @@
 #include <string.h>
 
 /* function prototypes */
- 
+ /* function prototypes */
+
+/*
+1. what happens when server ctrl d
+2. ip address 
+3. UDP send in real time?
+4. invalid argument
+5.error message
+*/
 void serve(struct hostent*, int, int);
 void client(struct hostent*, int, int);
 
@@ -64,7 +72,8 @@ int main(int argc, char *argv[])
         if (isdigit(*ch) == 0) opt_err();
         ch++;
     }           
-    portno = atoi(argv[argc-1]);    
+    portno = atoi(argv[argc-1]); 
+    if (portno < 1025 || portno > 65535) opt_err();   
     if (argc - 2 == optind) hflag = 1;
     if (hflag == 1)  {
     	server = gethostbyname(argv[optind]);
@@ -96,7 +105,7 @@ int main(int argc, char *argv[])
 
 void serve(struct hostent *server, int uflag, int portno){
 	int sockfd, newsockfd, clilen, pid;
-
+    
     struct sockaddr_in serv_addr, cli_addr; 
     char buffer[256];
     if (server == NULL) {
@@ -128,13 +137,10 @@ void serve(struct hostent *server, int uflag, int portno){
         while(1){
             bzero(buffer,256);    
             int n;
-            while (1){
-                n = read(sockfd,buffer,255);
-                if (n == 0) break;
-                if (n < 0) 
-                     int_err();
-                printf("%s",buffer);
-            }
+            n = read(sockfd,buffer,255);          
+            if (n < 0) 
+                 int_err();
+            printf("%s",buffer);
         }
     }
     else {
@@ -155,7 +161,6 @@ void client(struct hostent *server, int uflag, int portno){
 	int sockfd, n;
     struct sockaddr_in serv_addr;    
     char buffer[256];
-    char buffer2[256];
     if (uflag == 1) sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     else sockfd = socket(AF_INET, SOCK_STREAM, 0);    
     if (sockfd < 0) 
@@ -170,18 +175,15 @@ void client(struct hostent *server, int uflag, int portno){
          server->h_length);
     serv_addr.sin_port = htons(portno);
     if (connect(sockfd,(struct sockaddr *)&serv_addr,sizeof(serv_addr)) < 0) 
-        error("ERROR connecting");
+        int_err();
     if (uflag == 1){
         while (1){
             bzero(buffer,256);
-            bzero(buffer2,256);
-            int s = 0;
-            while (fgets(buffer,255,stdin) != 0){
-                s += sprintf(buffer2+s,"%s",buffer);
-            }           
-            n = write(sockfd,buffer2,strlen(buffer2));
+            fgets(buffer,255,stdin);
+            n = write(sockfd,buffer,strlen(buffer));
+            if (n == 0) while(1);
             if (n < 0) 
-                  int_err();
+                 int_err();
          }
     }
     else {
