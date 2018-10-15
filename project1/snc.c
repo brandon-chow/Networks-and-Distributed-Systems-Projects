@@ -84,7 +84,7 @@ int main(int argc, char *argv[])
         ch++;
     }           
     portno = atoi(argv[argc-1]); 
-    if (portno < 1025 || portno > 65535) opt_err();   
+    if (is_server == 1 & (portno < 1025 || portno > 65535)) opt_err();   
     if (argc - 2 == optind) hflag = 1;
     if (hflag == 1)  {
     	server = gethostbyname(argv[optind]);
@@ -166,7 +166,9 @@ void *Thread_write(void* arg){
     }
     else if (uflag == 1 && is_server == 1){
         socklen_t temp = sizeof(remaddr);
+	bzero(buffer,256);    
         recvlen = recvfrom(sockfd, buffer, strlen(buffer), 0, (struct sockaddr *)&remaddr, &temp);
+	printf("%s",buffer)
         tag = 1;
         while(1){
             bzero(buffer,256);    
