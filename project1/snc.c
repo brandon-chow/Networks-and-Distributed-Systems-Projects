@@ -40,17 +40,17 @@ int uflag, is_server;
 void error(char *msg)
 {
     perror(msg);
-    exit(1);
+    exit(0);
 }
 
 void opt_err(){
 	fprintf(stderr,"invalid or missing options\n");
     fprintf(stderr,"usage: snc [­-l] [­-u] [hostname] port\n");   
-    exit(1);
+    exit(0);
 }
 void int_err(){
 	fprintf(stderr,"internal error\n");
-	exit(1);
+	exit(0);
 }
 
 
@@ -166,10 +166,10 @@ void *Thread_write(void* arg){
     }
     else if (uflag == 1 && is_server == 1){
         socklen_t temp = sizeof(remaddr);
-	bzero(buffer,256);    
-        recvlen = recvfrom(sockfd, buffer, strlen(buffer), 0, (struct sockaddr *)&remaddr, &temp);
-	printf("%s",buffer)
+	    bzero(buffer,256);    
+        recvlen = recvfrom(sockfd, buffer, 255, 0, (struct sockaddr *)&remaddr, &temp);	    
         tag = 1;
+        printf("%s",buffer);
         while(1){
             bzero(buffer,256);    
             int n;
