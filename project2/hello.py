@@ -1,16 +1,24 @@
 #!/usr/bin/env python3
 
-class InputError(Exception):
-    """Exception raised for errors in the input.
-
-    Attributes:
-        expression -- input expression in which the error occurred
-        message -- explanation of the error
-    """
-    def __init__(self, expression, message):
-        self.expression = expression
-        self.message = message
+import sys
+import threading
 
 
-if __name__ == "__main__":
-	print(ord('\n'))
+
+def helper(i):
+    f = open('a.txt','w+')
+    f.seek(i)
+    for k in range(5):
+        f.write('2')
+    f.close()
+f = open('a.txt','w+')
+for i in range(10):
+    f.write('1')
+f.close()
+
+th1 = threading.Thread(target=helper,args=(0,))
+th2 = threading.Thread(target=helper,args=(5,))
+th1.start()
+th2.start()
+th1.join()
+th2.join()
