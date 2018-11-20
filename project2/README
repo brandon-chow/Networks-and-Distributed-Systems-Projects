@@ -1,0 +1,13 @@
+Name: Yiyang Ou
+CNetID:12160620
+
+My code can do both single thread download and parallel download using config file. The code is written in Python3 and if ./pftp.py, please do 'chmod u+x pftp.py' and then run.
+
+Regarding the output, the program prints message to stder and return corresponding error message: 
+1-can't connenct to server ; 2 - authentication faile; 3 - file not found; 
+4-syntax error; 5 - command not implemented by server; 6- operatortion not allowed; 7 - generic error 
+
+If -l is present, the program will write log to specified file or stdout.
+
+ 
+

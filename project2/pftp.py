@@ -21,11 +21,14 @@ username,server,name,file-path,password
 import argparse
 import socket 
 import threading
+from threading import Lock
 import sys
+import os
 port = 21
-log = ''
+log = None
+err = 0
 
-
+lock = threading.Lock()
 
 def read_from_server(server,username,file,password,flag=0,segment=None):
     '''
@@ -56,26 +59,39 @@ def read_from_server(server,username,file,password,flag=0,segment=None):
 
      send QUIT
     '''
-    global log,port
+    global log,port,lock,err
 
     sc_ctrl = socket.socket(socket.AF_INET,socket.SOCK_STREAM)    
     try: 
         ip_server = socket.gethostbyname(server)
         sc_ctrl.connect((ip_server,port))
     except:
-        sys.stderr.write("can't connenct to server")
-        exit(1)
+        if flag != 1:
+            sys.stderr.write("can't connect to server\n")
+        with lock:
+            err=1
+        sys.exit(1)
     msg = None
     msg_send = None
     size = -1
     while True:
         try:         
             # remeber to write log and error handler (such as host name incorrect blahblah)           
-            msg = sc_ctrl.recv(128).decode()        
-              
-            if log is not None:
-               log.write('S->C: '+ msg)   
-
+            msg = sc_ctrl.recv(128).decode() 
+        except:
+            sys.stderr.write("generic error1\n")
+            with lock:
+                err=7
+            sys.exit(7)       
+        try:
+            if not msg:
+                continue
+            if log: 
+                if flag == 2:               
+                    with lock:
+                      log.write('S->C: ' + msg)
+                else:
+                    log.write('S->C: ' + msg)  
             if int(msg[0:3]) == 220:
                 msg_send = ('USER ' + username + '\n').encode()
             elif int(msg[0:3]) == 331:
@@ -84,7 +100,7 @@ def read_from_server(server,username,file,password,flag=0,segment=None):
                 if flag == 0 or flag == 2:
                     msg_send = ('TYPE I' + '\n').encode()
                 elif flag == 1:
-                    msg_send = ('STAT ' + file + '\n').encode()
+                    msg_send = ('SIZE ' + file + '\n').encode()
             elif int(msg[0:3]) == 200:
                 msg_send = ('PASV' + '\n').encode()      
             elif int(msg[0:3]) == 227:
@@ -96,58 +112,83 @@ def read_from_server(server,username,file,password,flag=0,segment=None):
                 elif flag ==2:
                     msg_send = ('REST ' + str(segment[0]) + '\n').encode()
             elif int(msg[0:3]) == 530:
-                sys.stderr.write("authentication failed")                
-                exit(2)
+                sys.stderr.write("authentication failed\n")  
+                exit(2) 
             elif int(msg[0:3]) == 213:
-                size =int(msg.split()[-9])
+                size =int(msg.split()[-1])
                 msg_send = ('QUIT' + '\n').encode()
             elif int(msg[0:3]) == 221:
                 sc_ctrl.close()
                 return size
             elif int(msg[0:3]) == 350:
                 break
-            if log:                
-               log.write('C->S: ' + msg_send.decode())   
+            if log: 
+                if flag == 2:               
+                    with lock:
+                        log.write('C->S: ' + msg_send.decode())   
+                else:
+                    log.write('C->S: ' + msg_send.decode())  
             sc_ctrl.send(msg_send)     
         except:
-            if msg and msg[0:3] == '530': exit(2)
+            if msg and msg[0:3] == '530': 
+                with lock:
+                    err=2
+                sys.exit(2)
             if size != -1: return size
-            sys.stderr.write("generic error")
-            exit(7)
+            
     sc_data = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     try:
         sc_data.connect((ip_server,data_port))
     except:
-        sys.stderr.write("can't connenct to server")
-        exit(1)
+        sys.stderr.write("can't connect to server\n")
+        with lock:
+            err=1
+        sys.exit(1)
     msg_send = ('RETR ' + file + '\n').encode()
-    if log: log.write('C->S: ' + msg_send.decode())
+    if log: 
+        if flag == 2:               
+            with lock:
+                log.write('C->S: ' + msg_send.decode())   
+        else:
+            log.write('C->S: ' + msg_send.decode())  
+    
     sc_ctrl.send(msg_send)
     while True:
         try:
-            msg = sc_ctrl.recv(128).decode()   
-            if log: log.write('S->C: ' + msg)
+            msg = sc_ctrl.recv(128).decode()
+            if log: 
+                if flag == 2:               
+                    with lock:
+                        log.write('S->C: ' + msg)   
+                else:
+                    log.write('S->C: ' + msg)  
         except:            
-            sys.stderr.write("generic error")
-            exit(7)
+            sys.stderr.write("generic error2\n")
+            with lock:
+                err=7
+            sys.exit(7)
         if int(msg[0:3]) == 150:
                 break            
         elif int(msg[0:3]) == 550:
-            sys.stderr.write("file not found")            
-            exit(3)
+            sys.stderr.write("file not found\n")
+            with lock:
+                err=3            
+            sys.exit(3)
     f = open(file,"br+")#why does br+ work???
     if segment:
         f.seek(segment[0])
         total_bytes = segment[1] - segment[0] + 1
-    cur = 0
+    cur = 0    
     while True:
         try:
-            if flag == 2 and total_bytes - cur <=  1024:
+            if flag == 2 and total_bytes - cur <=  1024:                
                 received_data = sc_data.recv(total_bytes-cur)  
                 cur += total_bytes - cur    
                 f.write(received_data)
                 break
-            received_data = sc_data.recv(1024)     
+            received_data = sc_data.recv(1024)  
+            if flag == 2 and not received_data:
+                    continue   
             # we know the total len is total_bytes; use cur to store bytes already received; 
             # then in the final receive: we know we only want total_bytes - cur bytes many data;
             # so ) : total - cur - 1; as 0: 2 are 2 bytes 
@@ -156,25 +197,42 @@ def read_from_server(server,username,file,password,flag=0,segment=None):
             cur += len(received_data)
             f.write(received_data)
         except:
-            sys.stderr.write("generic error")
-            exit(7)
+            sys.stderr.write("generic error3\n")
+            with lock:
+                err=7
+            sys.exit(7)
     f.close()
-    print(cur)
+
+    sc_data.close()
     while True:
         try:
             msg = sc_ctrl.recv(128).decode()
-            if log: log.write('S->C: ' + msg) 
-            if int(msg[0:3]) == 226:
+            if not msg:
+                continue
+            if log: 
+                if flag == 2:               
+                    with lock:
+                        log.write('S->C: ' + msg)   
+                else:
+                    log.write('S->C: ' + msg)              
+            if int(msg[0:3]) == 226 or int(msg[0:3]) == 426:
                 msg_send = ('QUIT' + '\n').encode()
             elif int(msg[0:3]) == 221:
                 sc_ctrl.close()
-                sc_data.close()
                 break
-            if log: log.write('C->S: ' + msg_send.decode())
+            if log: 
+                if flag == 2:               
+                    with lock:
+                        log.write('C->S: ' + msg_send.decode())   
+                else:
+                    log.write('C->S: ' + msg_send.decode())  
+            
             sc_ctrl.send(msg_send)
         except:
-            sys.stderr.write("generic error")
-            exit(7)
+            sys.stderr.write("generic error4\n")
+            with lock:
+                err=7
+            sys.exit(7)
            
 
 
@@ -197,7 +255,7 @@ if 221: good
 if __name__ == "__main__":
     ''' 
     argument parsing:
-    -h/--help  (exits with 0) 
+    -h/--help  (sys.exits with 0) 
     -v/--version name,v,author,E:0 
     -f/--file 
     -s/--server hostname
@@ -205,14 +263,13 @@ if __name__ == "__main__":
     -n/--username defa:,
     -P/--password: defa:user@localhost.localnet
     -l/--log if file is "-":stdout, preprended by C->S,S->C
-    -t/--thread para/config file, LINE FEED 0x0A ie \n
+    -t/--thread para/config file, LINE FEED 0x0A ie 
     '''
     parser = argparse.ArgumentParser(description = 'pftp project')
     parser.add_argument('-v','--version',action='version',version='pftp Yiyang Ou Ver:0.1')
     required = parser.add_argument_group("Required Arguments")
-    required.add_argument('-f','--file',type=str,help='Specifies the file to download.',dest='file',required=True)
-    required.add_argument('-s','--server',type=str,help='Specifies the server to download the file from.',dest='hostname',required=True)
-
+    required.add_argument('-f','--file',type=str,help='Specifies the file to download.',dest='file',default=None)
+    required.add_argument('-s','--server',type=str,help='Specifies the server to download the file from.',dest='hostname',default=None)
     options = parser.add_argument_group("Options")    
     options.add_argument('-p','--port',type=int,help='Specifiefs the port to be used when contacting the server\
         .(default value:21)',dest='port',default=21)
@@ -228,20 +285,25 @@ if __name__ == "__main__":
     # behaves as -h if no parameter
     if len(sys.argv)==1:
         parser.print_help()
-        exit(0)
+        sys.exit(0)
     try:
         args =parser.parse_args()
     except:
         parser.exit(4)
+    if args.config_file is None:
+        if (not args.file) or (not args.hostname):
+            sys.stderr.write('pftp.py: error: the following arguments are required: -f/--file, -s/--server\n')
+            sys.exit(4)
     if args.password == '@localhost.localnet':
         args.password = args.username + '@localhost.localnet'
     port=args.port
     if args.log == '-':
         log = sys.stdout
     elif args.log is not None:
-        log = open(args.log,'bw')
+        log = open(args.log,'w+')
     else:
         log = None
+
     '''
     read from config file: args.config_file
     implement multithreading: read from server; log; write to file
@@ -254,8 +316,8 @@ if __name__ == "__main__":
         try:
             f = open(args.config_file)
         except:
-            sys.stderr.write("config file not found")
-            exit(4)
+            sys.stderr.write("syntax error: config file not found\n")          
+            sys.exit(4)
         lines = [line.rstrip('\n') for line in f]
         for conf in lines:
             try:
@@ -264,30 +326,42 @@ if __name__ == "__main__":
                 hostname_list.append(conf.split('@')[-1].split('/')[0])
                 file_path.append(conf.split('@')[-1].split('/',2)[-1])
             except:
-                sys.stderr.write("config file invalid")
-                exit(4)
+                sys.stderr.write("syntax error: config file invalid\n")
+                sys.exit(4)
         f.close()        
+        try:
+            file = file_path[0]
+            npartition = len(hostname_list)
+            for i in file_path:
+                if i != file:
+                    sys.exit(4)
+            #print(npartition)
+            read_pos_list =[]        
+            size = read_from_server(hostname_list[0],username_list[0],file,password_list[0],1)
+            size_per_partition = size // npartition
+            for i in range(npartition-1):
+                read_pos_list.append((i*size_per_partition,(i+1)*size_per_partition-1))
+            read_pos_list.append(((npartition-1)*size_per_partition,size-1))
+            th_list =[]
+        except:
+            sys.stderr.write("syntax error: config file invalid\n")
+            sys.exit(4)
 
-        npartition = len(hostname_list)
-        read_pos_list =[]
-        size = read_from_server(args.hostname,args.username,args.file,args.password,1)
-        size_per_partition = size // npartition
-        for i in range(npartition-1):
-            read_pos_list.append((i*size_per_partition,(i+1)*size_per_partition-1))
-        read_pos_list.append(((npartition-1)*size_per_partition,size-1))
-        th_list =[]
-        open(args.file,'bw+')
+        open(file,'bw+')
         for i in range(npartition):
             th_list.append(threading.Thread(target=read_from_server,
                 args=(hostname_list[i],
                     username_list[i],
-                    args.file,
+                    file_path[i],
                     password_list[i],
                     2,
                     read_pos_list[i])))
             th_list[-1].start()
         for i in range(npartition):
             th_list[i].join()
+            with lock:
+                if err != 0:
+                    exit(err)
     else:
         read_from_server(args.hostname,args.username,args.file,args.password)
     # print("file:%s, server: %s, port: %d, user: %s, pass: %s, log: %s" %(args.file,args.hostname,args.port,args.username,args.password,args.log))
