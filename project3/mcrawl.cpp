@@ -17,9 +17,9 @@
 #include <mutex>
 
 using namespace std;
-int cnt = 0;
+int count = 0;
 //download_queue for const char and store parse from input; set for string; need convertion 
-queue<const char*> download_queue;
+queue<string> download_queue;
 set<string> crawled;
 struct hostent *server;         
 int c,max_flows = -1,port = -1;
@@ -27,7 +27,7 @@ string hostname = "", local_dir ="";
 string delimiter = ".";
 mutex mtx;
 struct sockaddr_in serv_addr;
-
+ofstream myfile;
 /*
     1. parse user input: mcrawl [ -n max-flows ] [ -h hostname ] [ -p port ] [-f local-
 directory]
@@ -50,6 +50,7 @@ void int_err(){
 void crawler();
 
 int main(int argc, char** argv){
+    
     while ((c = getopt(argc,argv,"n:h:p:f:")) != -1){
         switch(c)
         {
@@ -87,7 +88,7 @@ int main(int argc, char** argv){
         printf("Error creating directory!n");
         exit(1);
     }
-    download_queue.push((const char*)"index.html");
+    download_queue.push("index.html");
     server = gethostbyname(hostname.c_str());        
     bzero((char *) &serv_addr, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;   
@@ -95,144 +96,165 @@ int main(int argc, char** argv){
          (char *)&serv_addr.sin_addr.s_addr,
          server->h_length);
     serv_addr.sin_port = htons(port);
+    myfile.open(local_dir + "/foo.txt");
     crawler();
+    myfile.close();
+    cout << count << endl;
     return 0;
 }
 
-bool compare(char* c, int len, string cmp){
+int compare(char* c, int len, string cmp){
+    int cnt = 0;
     for (int i = 0; i < len; i++)
     {
-    
-        if (*(c+i) == '\0' || *(c+i) != cmp.at(i))
-            return false;
+        if (*c == '\0') return 0 - cnt;
+        else if(*c != cmp.at(i))
+            return 0;
+        c++;
+        cnt++;
     }
-    
-    return true;
+    while (*c != '\0' && *c != '"')
+    {
+        cnt++;
+        c++;
+    }
+    if (*c == '\0') return -cnt;
+    else return cnt;
 }
 
-char* parse_file(char* to_parse, size_t start, size_t len){
+string parse_file(char* to_parse, size_t len){
     size_t cur = 0;
     bool flag = false;    
+    int len_of_key = 0;
+    string ret = "";
+    char* temp;
+    char* pos = to_parse;
     while (cur < len)
     {
-
-        char* pos = to_parse + start + cur;
+        //cout << len << ": ";
+        //cout << strlen(to_parse) << endl;
+        flag = false;
         char c = *pos;
         //scout << *pos;  
-       // cout << c << endl;
         //cout << c;
-            
+        //cout << c;
         switch (c)
         {            
             case 'H':
-                if (compare(pos,4,"HREF"))
+            //href\0
+                len_of_key = compare(pos,6,"HREF=\"");
+                if (len_of_key > 0)
                 {
                     flag = true;
-                    cur += 6;
+                    cur += len_of_key+1;
+                    temp = pos + len_of_key;
+                    len_of_key -= 6;
                     pos += 6;
+                }
+                else if (len_of_key < 0) 
+                {
+                    ret = string(pos);
+                    break;
                 }
                 break;
             case 'h':
-                if (compare(pos,4,"href"))
+                len_of_key = compare(pos,6,"href=\"");
+                if (len_of_key > 0)
                 {
                     flag = true;
-                    cur += 6;
+                    cur += len_of_key+1;
+                    temp = pos + len_of_key;
+                    len_of_key -= 6;
                     pos += 6;
-
+                }
+                else if (len_of_key < 0)  {
+                    ret = string(pos);
+                    break;
+               
                 }
                 break;
             case 's':
-                if (compare(pos,3,"src"))
+                len_of_key = compare(pos,5,"src=\"");
+                if (len_of_key > 0)
                 {
                     flag = true;
-                    cur += 5;
+                    cur += len_of_key+1;
+                    temp = pos + len_of_key;                    
+                    len_of_key -= 5;
                     pos += 5;
+                }
+                else if (len_of_key < 0)  {
+                    ret = string(pos);
+                    break;
+                }
+            case 'S':
+                len_of_key = compare(pos,5,"SRC=\"");
+                if (len_of_key > 0)
+                {
+                    flag = true;
+                    cur += len_of_key+1;
+                    temp = pos + len_of_key;                    
+                    len_of_key -= 5;
+                    pos += 5;
+                }
+                else if (len_of_key < 0)  {
+                    ret = string(pos);
+                    break;
                 }
                 break;
             default:
                 flag = false;
         }
-        if (flag == false) cur += 1;
+        if (flag == false) {
+            pos++;
+            cur += 1;
+        }
         else 
-        {            
-         
-            char* temp = pos;
-
-            while (*temp != '\0' && *temp != '"'){
-                temp += 1;      
-            }
-            if (*temp == '\0') 
-                {
-
-                    return pos;
-                }
-            else
-            {   
-                *temp = '\0';
-                char* new_file = strdup(pos);                
-                pos = temp + 1;
-                mtx.lock();
-                download_queue.push(new_file);
-                mtx.unlock();            
-                //cout << new_file << endl;
-            }
+        {  
+        *temp = '\0';
+        char* new_file = strdup(pos);                
+        pos = temp + 1;
+        mtx.lock();
+        download_queue.push(string(new_file));
+        mtx.unlock();            
+      //  cout << new_file << endl;
         }        
     }
-    return NULL;
+   // if (ret != "")
+    // << ret << endl;
+    return ret;
 }
 
 void crawl_html(string to_crawl,int sockfd){
 	// crawl from html, need to parse "to_crawls" from the html and add them to queue
-	char send_data[256], recv_data[30];
-    char* next;
-    char temp_buff[1024];
-    char* temp_ptr = &temp_buff[0];
+	char send_data[256], recv_data[1024];
+    int len_of_key = 0;
+    string temp_s;
     const char* c_hostname = hostname.c_str();
     const char* c_to_crawl = to_crawl.c_str();
+    int size = sizeof(recv_data);
+    //cout << size <<endl; 
 	snprintf(send_data, sizeof(send_data), "GET /%s HTTP/1.1\r\nHost: %s\r\n\r\n",c_to_crawl,c_hostname); 
 	int n = 0;        
-  
-    memset(temp_buff,0,sizeof(temp_buff));
-	n = sendto(sockfd, send_data, strlen(send_data), 0, (struct sockaddr *)&serv_addr, sizeof(serv_addr));            
+  	n = sendto(sockfd, send_data, strlen(send_data), 0, (struct sockaddr *)&serv_addr, sizeof(serv_addr));            
     while (1)
     {
-        size_t start = 0;
-        n = recv(sockfd,recv_data,sizeof(recv_data),0);                        
+        *(recv_data+ len_of_key) = 'a';
+        myfile << recv_data << endl;
+        n = recv(sockfd,len_of_key + recv_data,size - len_of_key,0); 
+        n += len_of_key;
+     //   cout <<  recv_data << endl << "----------"<<endl ;
         if (n == 0)        
             break;
-        string received = string(recv_data);  
-        if (temp_ptr != &(temp_buff[0]))
-        {        
-            char* next = &recv_data[0];
-            while (*next != '"')
-            {
-                *temp_ptr = *next;
-                next += 1;
-                temp_ptr += 1;
-                start += 1;
-            }            
-            *(temp_ptr++) = '\0';
-                        cout <<   temp_buff << endl;
-            mtx.lock();
-            download_queue.push(temp_buff);
-            mtx.unlock();    
-           // cout << temp_buff << endl;           
-            memset(temp_buff,0,sizeof(temp_buff));             
-            temp_ptr = &temp_buff[0];        
-        }        
-        //cout << recv_data;
-        next = parse_file(recv_data, start, n);
-        if (next != NULL)
+        
+        temp_s = parse_file(recv_data, n);
+        len_of_key = temp_s.size();
+       // cout << len_of_key << endl;
+        if (len_of_key > 0)
         {
-            //cout << next <<endl;
-          
-            while (*next != '\0')
-            {
-                *temp_ptr = *next;
-                temp_ptr++;
-                next++;
-            }
-        }	   
+            snprintf(recv_data, size, "%s",temp_s.c_str()); 
+          //  cout << recv_data << endl;
+        }
     }
 }
 
@@ -242,7 +264,7 @@ void crawl_file(string to_crawl,int sockfd){
 }
 
 void crawler(){
-	const char* temp;
+	string to_crawl;
     string::size_type r_pos, l_pos;
 	int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) 
@@ -253,11 +275,10 @@ void crawler(){
 	while (1){
 		mtx.lock();
 		if (download_queue.empty()) return;
-		temp = download_queue.front();
+		to_crawl = download_queue.front();
 		download_queue.pop();
 		mtx.unlock();
-		string to_crawl = string(temp);
-        if (to_crawl.compare("#") == 0)
+	    if (to_crawl.compare("#") == 0)
             continue;
         l_pos = to_crawl.find("http://");
         if (l_pos != string::npos)
@@ -271,16 +292,21 @@ void crawler(){
         }
 		//convert char* to string
 		if (crawled.count(to_crawl) != 0) continue; //check if crawled
-		crawled.insert(to_crawl);        
+		
+        crawled.insert(to_crawl);        
         string::size_type pos = to_crawl.rfind('.');
 		string file_type = to_crawl.substr(pos+1,to_crawl.size()-pos);
-
-
         if (file_type == "htm" || file_type == "html"){
+            count++;
+            //myfile << to_crawl << endl;
 			crawl_html(to_crawl,sockfd);
         }
-		else crawl_file(to_crawl,sockfd); 
-	}
+		else {
+            count++;
+         //   myfile << to_crawl << endl;
+            crawl_file(to_crawl,sockfd); 
+	    }
+    }
 }
 /* instruction for creating file 
     ofstream myfile;
