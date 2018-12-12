@@ -19,7 +19,7 @@
 #include <thread>
 
 using namespace std;
-int count = 0;
+int count = 0;int test  = 1;
 //download_queue for const char and store parse from input; set for string; need convertion 
 queue<string> download_queue;
 set<string> crawled;
@@ -95,7 +95,7 @@ int main(int argc, char** argv){
         printf("Error creating directory!n");
         exit(1);
     }
-    download_queue.push("dynamics/");
+    download_queue.push("index.html");
     server = gethostbyname(hostname.c_str());        
     bzero((char *) &serv_addr, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;   
@@ -296,7 +296,7 @@ string parse_file(char* to_parse, size_t len,char cookie[512]){
 
 void crawl_html(string to_crawl,int sockfd,char cookie[512]){
 	// crawl from html, need to parse "to_crawls" from the html and add them to queue
-    cout << cookie << endl;
+    //cout << cookie << endl;
     char send_data[256], recv_data[1024];
     string::size_type r_pos;
      string filename,temp;
@@ -332,7 +332,7 @@ void crawl_html(string to_crawl,int sockfd,char cookie[512]){
 	else
         snprintf(send_data, sizeof(send_data), "GET /%s HTTP/1.1\r\nHost: %s\r\nCookie: %s;\r\n\r\n",c_to_crawl,c_hostname,cookie); 
         
-    cout << send_data << endl;
+   // cout << send_data << endl;
   
        
    // cout << send_data << endl;
@@ -347,7 +347,7 @@ void crawl_html(string to_crawl,int sockfd,char cookie[512]){
         // cout << recv_data << endl;
 
         n += len_of_key;
-     //   cout <<  recv_data << endl << "----------"<<endl ;
+        // cout <<  recv_data << endl << "----------"<<endl ;
         recv_data[n] = '\0';
         file << recv_data+len_of_key;
         if (n == 0)        
@@ -415,14 +415,7 @@ void crawler(){
             continue;
         }
         l_pos = to_crawl.find("http");
-        if (to_crawl.at(0) == 'h')
-        {
-            mtx1.lock();
-                running--;
-                mtx1.unlock();
-                continue;
-
-        }
+        
         if (l_pos != string::npos)
         {
             if (to_crawl.find(hostname) == string::npos)
@@ -452,8 +445,7 @@ void crawler(){
         cout << to_crawl << " "  << endl;
         if (file_type == "htm" || file_type == "html" || to_crawl.substr(to_crawl.size()-1,1).compare("/") ==0 ){
             //myfile << to_crawl << endl;
-
-			crawl_html(to_crawl,sockfd,cookie);
+            		crawl_html(to_crawl,sockfd,cookie);
         }
 		else {
          //   myfile << to_crawl << endl;
